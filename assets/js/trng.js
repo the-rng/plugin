@@ -85,6 +85,32 @@
 		}
 	}
 
+	function utcDate(mysql) {
+		return new Date(String(mysql).replace(' ', 'T') + 'Z');
+	}
+
+	// "2026-07-16 00:52:08" (UTC) -> "2026-07-16 01:52:08 BST" in the display timezone.
+	function fmtLocal(mysqlUtc) {
+		try {
+			var parts = new Intl.DateTimeFormat('en-GB', {
+				timeZone: cfg.display_timezone || 'Europe/London',
+				year: 'numeric', month: '2-digit', day: '2-digit',
+				hour: '2-digit', minute: '2-digit', second: '2-digit',
+				hour12: false, timeZoneName: 'short'
+			}).formatToParts(utcDate(mysqlUtc));
+			var m = {};
+			parts.forEach(function (p) { m[p.type] = p.value; });
+			return m.year + '-' + m.month + '-' + m.day + ' ' + m.hour + ':' + m.minute + ':' + m.second + (m.timeZoneName ? ' ' + m.timeZoneName : '');
+		} catch (e) {
+			return mysqlUtc + ' UTC';
+		}
+	}
+
+	function fmtBoth(mysqlUtc) {
+		if (!mysqlUtc) return '\u2014';
+		return fmtLocal(mysqlUtc) + '  (' + mysqlUtc + ' UTC)';
+	}
+
 	function renderDigits(container, str) {
 		var cells = container.children;
 		if (cells.length !== str.length) {
@@ -258,7 +284,7 @@
 				setText($('#trng-r-salt'), d.static_salt);
 				setText($('#trng-r-combined'), d.combined_hash);
 				setText($('#trng-r-signature'), d.drand_signature);
-				setText($('#trng-r-completed'), d.completed_at_utc + ' UTC');
+				setText($('#trng-r-completed'), fmtBoth(d.completed_at_utc));
 
 				var links = $('#trng-r-links');
 				if (links) links.innerHTML = beaconLinks(d.target_round);
@@ -280,61 +306,72 @@
 	}
 
 	/* ------------------------------------------------------------------
-	   VERIFY PAGE
+	   VERIFY PAGE — draw details layout with automatic verification
 	------------------------------------------------------------------ */
 
-	// Exact mirror of the server algorithm (and of the published scripts).
-	function recompute(d) {
+	// Deterministic walk — exact mirror of the server engine (and the
+	// published verification scripts). Returns structured steps.
+	function runDraw(d) {
 		var data = d.client_seed + ':' + d.round_uuid + ':' + d.static_salt + ':' + d.tickets_sold + ':' + d.max_tickets;
 		var max = Number(d.max_tickets);
 		var need = Number(d.num_winners) || 1;
 		var limit = 4294967295 - (4294967295 % max);
-		var log = [];
+		var winners = [];
+		var steps = [];
+		var attempt = 0;
 
-		log.push('data          = "' + data + '"');
-		log.push('key           = serverSeed = ' + d.server_seed);
-		log.push('limit         = 4294967295 - (4294967295 % ' + max + ') = ' + limit);
-
-		function walk(bytes, block, winners) {
+		function walk(bytes, block) {
 			for (var i = 0; i + 4 <= bytes.length && winners.length < need; i += 4) {
 				var value = new DataView(bytes.buffer, i, 4).getUint32(0, true);
-				var line = 'block ' + block + ' bytes[' + i + '..' + (i + 3) + '] = ' + bytesToHex(bytes.slice(i, i + 4)) + ' -> uint32 LE ' + value;
-
-				if (value >= limit) { log.push(line + '  REJECTED (>= limit)'); continue; }
-				var ticket = (value % max) + 1;
-				if (winners.indexOf(ticket) !== -1) { log.push(line + '  duplicate ticket ' + ticket + ' — skipped'); continue; }
-				winners.push(ticket);
-				log.push(line + '  ACCEPTED -> (value % ' + max + ') + 1 = ticket ' + ticket + '  (winner #' + winners.length + ')');
+				var step = { attempt: attempt++, block: block, value: value, ticket: null, outcome: 'rejected', winnerIndex: 0 };
+				if (value < limit) {
+					var ticket = (value % max) + 1;
+					step.ticket = ticket;
+					if (winners.indexOf(ticket) !== -1) {
+						step.outcome = 'duplicate';
+					} else {
+						winners.push(ticket);
+						step.outcome = 'winner';
+						step.winnerIndex = winners.length;
+					}
+				}
+				steps.push(step);
 			}
-			return winners;
 		}
 
 		return hmacSha256(data, d.server_seed).then(function (bytes) {
 			var combined = bytesToHex(bytes);
-			log.push('HMAC-SHA256   = ' + combined);
-			log.push(combined === d.combined_hash ? 'combined hash MATCHES stored value ✓' : 'combined hash DOES NOT MATCH stored value ✗');
+			walk(bytes, 0);
 
-			var winners = walk(bytes, 0, []);
-
-			function extend(block) {
+			function extend(n) {
 				if (winners.length >= need) return Promise.resolve();
-				return hmacSha256(data + ':extend:' + block, d.server_seed).then(function (b2) {
-					log.push('extension block ' + block + ' = HMAC-SHA256(data + ":extend:' + block + '")');
-					walk(b2, block, winners);
-					return extend(block + 1);
+				return hmacSha256(data + ':extend:' + n, d.server_seed).then(function (b2) {
+					walk(b2, n);
+					return extend(n + 1);
 				});
 			}
 
 			return extend(1).then(function () {
-				var stored = (d.winners || []).join(',');
-				var mine = winners.join(',');
-				var ok = combined === d.combined_hash && stored === mine;
-				log.push('');
-				log.push('recomputed winners: ' + mine);
-				log.push('stored winners:     ' + stored);
-				return { ok: ok, log: log.join('\n') };
+				return { data: data, combined: combined, winners: winners, steps: steps, limit: limit };
 			});
 		});
+	}
+
+	function chip(el, text, cls) {
+		if (!el) return;
+		el.textContent = text;
+		el.className = 'trng-chip ' + (cls || '');
+	}
+
+	function fieldRow(label, value, note) {
+		var esc = document.createElement('div');
+		esc.textContent = value == null ? '' : String(value);
+		var v = esc.innerHTML;
+		return '<div class="trng-field"><label>' + label + '</label>' +
+			'<div class="trng-field-row"><input type="text" class="trng-mono" readonly value="' + v.replace(/"/g, '&quot;') + '">' +
+			'<button type="button" class="trng-copy" data-copy="' + v.replace(/"/g, '&quot;') + '" title="Copy">&#10697;</button></div>' +
+			(note ? '<p class="trng-muted trng-small" style="margin:4px 0 0;">' + note + '</p>' : '') +
+			'</div>';
 	}
 
 	function handleVerify() {
@@ -342,24 +379,83 @@
 		if (!form) return;
 
 		var statusEl = $('#trng-verify-status');
-		var resultEl = $('#trng-verify-result');
-		var gridEl = $('#trng-v-grid');
+		var dd = $('#trng-dd');
 		var current = null;
 
-		function row(label, value, mono) {
-			var wrap = document.createElement('div');
-			var l = document.createElement('div');
-			l.className = 'trng-label';
-			l.textContent = label;
-			var v = document.createElement('div');
-			v.className = 'trng-value trng-wrap' + (mono ? ' trng-mono' : '');
-			v.textContent = value == null ? '—' : String(value);
-			wrap.appendChild(l); wrap.appendChild(v);
-			gridEl.appendChild(wrap);
+		function verdict(html, cls) {
+			var el = $('#trng-dd-verdict');
+			if (el) { el.innerHTML = html; el.className = 'trng-dd-verdict ' + (cls || ''); }
+		}
+
+		function renderWinnersRows(winners, verified) {
+			var box = $('#trng-dd-winners');
+			if (!box) return;
+			box.innerHTML = '';
+			(winners || []).forEach(function (t, i) {
+				var row = document.createElement('div');
+				row.className = 'trng-dd-winrow';
+				row.innerHTML = '<span class="trng-dd-windex">DRAW #' + (i + 1) + '</span>' +
+					'<span class="trng-dd-winnum">#' + t + '</span>' +
+					'<span class="trng-dd-wincheck">' + (verified ? '&#10003;' : '&hellip;') + '</span>';
+				box.appendChild(row);
+			});
+		}
+
+		function autoVerify(d) {
+			if (!d.server_seed) {
+				verdict('&#9203; <strong>Pending</strong><br>Committed to round ' + Number(d.target_round).toLocaleString() + '. The result resolves after ' + fmtLocal(d.round_time_utc) + '.', 'trng-dd-verdict-pending');
+				return;
+			}
+			if (!window.crypto || !window.crypto.subtle) {
+				verdict('Your browser does not support the Web Crypto API. Use the Manual Verification scripts instead.', 'trng-dd-verdict-pending');
+				return;
+			}
+			verdict('Verifying in your browser&hellip;', '');
+
+			runDraw(d).then(function (res) {
+				var stored = (d.winners || []).join(',');
+				var mine = res.winners.join(',');
+				var hashOk = res.combined === d.combined_hash;
+				var ok = hashOk && stored === mine;
+
+				// Steps table.
+				var tbody = document.querySelector('#trng-dd-steps tbody');
+				if (tbody) {
+					tbody.innerHTML = '';
+					res.steps.forEach(function (st) {
+						var tr = document.createElement('tr');
+						var outcome = 'Rejected (&ge; limit)';
+						var oc = 'trng-chip';
+						if ('winner' === st.outcome) { outcome = 'Winner #' + st.winnerIndex; oc = 'trng-chip trng-chip-green'; }
+						if ('duplicate' === st.outcome) { outcome = 'Duplicate &mdash; skipped'; }
+						tr.innerHTML = '<td>' + st.attempt + (st.block ? ' <span class="trng-muted trng-small">(ext ' + st.block + ')</span>' : '') + '</td>' +
+							'<td class="trng-mono">' + st.value + '</td>' +
+							'<td>' + (st.ticket ? '<strong>' + st.ticket + '</strong>' : '&mdash;') + '</td>' +
+							'<td><span class="' + oc + '">' + outcome + '</span></td>';
+						tbody.appendChild(tr);
+					});
+				}
+
+				renderWinnersRows(d.winners, ok);
+				var vb = $('#trng-dd-verifiedby');
+				if (vb && ok) show(vb);
+
+				verdict(
+					ok
+						? '&#10003; <strong>Verified</strong><br>Your browser reproduced the winning number' + (d.winners.length > 1 ? 's' : '') + ' exactly from the beacon randomness and the draw data. Nothing to trust &mdash; you just checked it.'
+						: '&#10007; <strong>Mismatch</strong><br>The recomputed result differs from the stored record. Combined hash ' + (hashOk ? 'matches' : 'does NOT match') + '.',
+					ok ? 'trng-dd-verdict-ok' : 'trng-dd-verdict-bad'
+				);
+
+				var log = $('#trng-v-recompute-out');
+				if (log) {
+					log.textContent = 'data = "' + res.data + '"\nkey  = ' + d.server_seed + '\nHMAC-SHA256 = ' + res.combined + '\nlimit = ' + res.limit + '\nrecomputed winners: ' + mine + '\nstored winners:     ' + stored;
+				}
+			});
 		}
 
 		function load(key) {
-			hide(resultEl);
+			hide(dd);
 			statusEl.classList.remove('trng-status-error');
 			setText(statusEl, 'Loading draw record…');
 
@@ -372,42 +468,64 @@
 
 				var d = data.data;
 				current = d;
-				gridEl.innerHTML = '';
+				setText(statusEl, '');
 
-				row('Status', d.status + (d.void_reason ? ' — ' + d.void_reason : ''));
-				row('Competition', d.competition_title);
-				row('Competition URL', d.competition_url || '—');
-				row('Tickets sold', d.tickets_sold);
-				row('Max tickets (draw range)', d.max_tickets);
-				row('Number of winners', d.num_winners);
-				row('Client seed (timestamp, ms)', d.client_seed, true);
-				row('Round ID (UUID)', d.round_uuid, true);
-				row('Static salt', d.static_salt, true);
-				row('Drand chain hash', d.chain_hash, true);
-				row('Committed drand round', Number(d.target_round).toLocaleString());
-				row('Round time (UTC)', d.round_time_utc);
-				row('Server seed (drand randomness)', d.server_seed || 'not yet emitted', true);
-				row('Beacon signature', d.drand_signature || '—', true);
-				row('Combined hash (HMAC-SHA256)', d.combined_hash || '—', true);
-				row('Record hash (ledger chain)', d.record_hash || '—', true);
-				row('Previous record hash', d.prev_hash || '(first record)', true);
-				row('Committed at (UTC)', d.created_at_utc);
-				row('Completed at (UTC)', d.completed_at_utc || '—');
-				row('Algorithm', d.algorithm);
+				// Header.
+				setText($('#trng-dd-roundid'), d.round_uuid);
+				var statusMap = { complete: ['Revealed', 'trng-chip-green'], pending: ['Pending', ''], void: ['Voided', 'trng-chip-red'] };
+				var sm = statusMap[d.status] || [d.status, ''];
+				chip($('#trng-dd-status-chip'), sm[0], sm[1]);
+				chip($('#trng-dd-status2'), sm[0] + (d.void_reason ? ' — ' + d.void_reason : ''), sm[1]);
 
-				setText($('#trng-v-plural'), (d.num_winners > 1) ? 's' : '');
-				renderWinners($('#trng-v-winners'), d.winners || []);
+				// Competition card.
+				setText($('#trng-dd-title'), d.competition_title);
+				var urlEl = $('#trng-dd-url');
+				if (urlEl) {
+					if (d.competition_url) { urlEl.href = d.competition_url; setText(urlEl, d.competition_url); show($('#trng-dd-urlwrap')); }
+					else { hide($('#trng-dd-urlwrap')); }
+				}
+				setText($('#trng-dd-sold'), Number(d.tickets_sold).toLocaleString());
+				setText($('#trng-dd-max'), Number(d.max_tickets).toLocaleString());
 
+				// Winners.
+				setText($('#trng-dd-plural'), (d.num_winners > 1) ? 's' : '');
+				chip($('#trng-dd-nwin'), d.num_winners + ' winner' + (d.num_winners > 1 ? 's' : ''), 'trng-chip-green');
+				renderWinnersRows(d.winners || [], false);
+				hide($('#trng-dd-verifiedby'));
+
+				// Verifiably fair data fields.
+				var clientSeedNote = 'Draw Timestamp · ' + fmtLocal(new Date(Number(d.client_seed)).toISOString().slice(0, 19).replace('T', ' '));
+				var fields = $('#trng-dd-fields');
+				if (fields) {
+					fields.innerHTML =
+						fieldRow('Server Seed (Revealed)', d.server_seed || 'not yet revealed') +
+						fieldRow('Drand Signature (Public)', d.drand_signature || '—') +
+						fieldRow('Client Seed', d.client_seed, clientSeedNote) +
+						fieldRow('Round ID', d.round_uuid) +
+						fieldRow('Static Salt', d.static_salt) +
+						'<div class="trng-grid-2">' + fieldRow('Tickets Sold', d.tickets_sold) + fieldRow('Max Tickets', d.max_tickets) + '</div>';
+				}
+
+				// All together.
+				var pre = $('#trng-dd-prehash');
+				if (pre) pre.value = d.client_seed + ':' + d.round_uuid + ':' + d.static_salt + ':' + d.tickets_sold + ':' + d.max_tickets;
+				var hashBox = $('#trng-dd-hash');
+				if (hashBox) hashBox.innerHTML = fieldRow('Hash (HMAC-SHA256)', d.combined_hash || '—');
+
+				// Sidebar.
+				setText($('#trng-dd-round'), Number(d.target_round).toLocaleString());
 				var links = $('#trng-v-beacon-links');
 				if (links) links.innerHTML = beaconLinks(d.target_round);
+				setText($('#trng-dd-key'), d.draw_key);
+				setText($('#trng-dd-derived'), (d.winners || []).length || d.num_winners);
+				setText($('#trng-dd-pool'), Number(d.max_tickets).toLocaleString());
+				setText($('#trng-dd-rechash'), d.record_hash || '—');
+				setText($('#trng-dd-t-committed'), fmtLocal(d.created_at_utc));
+				setText($('#trng-dd-t-round'), fmtLocal(d.round_time_utc));
+				setText($('#trng-dd-t-revealed'), d.completed_at_utc ? fmtLocal(d.completed_at_utc) : '—');
 
-				show(resultEl);
-
-				if (d.status === 'pending') {
-					setText(statusEl, 'This draw is committed to round ' + Number(d.target_round).toLocaleString() + ' and has not been resolved yet. Reload after ' + d.round_time_utc + ' UTC.');
-				} else {
-					setText(statusEl, 'Record loaded. Follow the steps below to verify it independently.');
-				}
+				show(dd);
+				autoVerify(d);
 			}).catch(function () {
 				setText(statusEl, 'Network error while looking up the key.');
 				statusEl.classList.add('trng-status-error');
@@ -422,29 +540,20 @@
 		var recomputeBtn = $('#trng-v-recompute');
 		if (recomputeBtn) {
 			recomputeBtn.addEventListener('click', function () {
-				if (!current || !current.server_seed) {
-					setText($('#trng-v-recompute-out'), 'This draw has no beacon yet (still pending).');
-					return;
-				}
-				if (!window.crypto || !window.crypto.subtle) {
-					setText($('#trng-v-recompute-out'), 'Your browser does not support the Web Crypto API. Use the Manual Verification scripts instead.');
-					return;
-				}
-				recompute(current).then(function (res) {
-					var out = $('#trng-v-recompute-out');
-					out.innerHTML = '';
-					var verdict = document.createElement('div');
-					verdict.className = res.ok ? 'ok' : 'fail';
-					verdict.textContent = res.ok
-						? '✓ VERIFIED — your browser reproduced the stored result exactly.'
-						: '✗ MISMATCH — the recomputed result differs from the stored record.';
-					var pre = document.createElement('div');
-					pre.textContent = res.log;
-					out.appendChild(verdict);
-					out.appendChild(pre);
-				});
+				if (current) autoVerify(current);
 			});
 		}
+
+		// Copy buttons (delegated).
+		document.addEventListener('click', function (e) {
+			var btn = e.target.closest ? e.target.closest('.trng-copy') : null;
+			if (!btn || !navigator.clipboard) return;
+			navigator.clipboard.writeText(btn.getAttribute('data-copy') || '').then(function () {
+				var old = btn.innerHTML;
+				btn.innerHTML = '&#10003;';
+				setTimeout(function () { btn.innerHTML = old; }, 1200);
+			});
+		});
 
 		// Auto-load when ?key= present.
 		var prefill = form.querySelector('[name="key"]').value.trim();
