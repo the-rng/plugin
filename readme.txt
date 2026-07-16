@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.4.2
+Stable tag: 2.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,15 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.5.0 =
+* Redesigned verify page: full draw-details dashboard with status chips, winning-ticket panel, derived-numbers table, copyable verifiably-fair data, pre-hash string, drand proof sidebar, draw information and timeline.
+* Verification now runs automatically in the visitor's browser the moment a record loads, with per-winner ticks and a clear verdict.
+
+
+= 2.4.3 =
+* Verify page and draw results now display times in the configured display timezone (default Europe/London) with the canonical UTC value alongside. Stored records, the ledger and GitHub files remain UTC.
+
 
 = 2.4.2 =
 * Integrity endpoint now sends no-cache headers so the file-hash manifest can never be served stale by page caches or CDNs.
