@@ -3,7 +3,7 @@
  * Plugin Name:       The-RNG — Verifiably Fair Random Number Generator
  * Plugin URI:        https://the-rng.com
  * Description:       Verifiably fair random number generation for competitions and raffles, powered by the drand distributed randomness beacon (League of Entropy, served via the Cloudflare relay). HMAC-SHA256 seed combination, rejection sampling (no modulo bias), tamper-evident draw ledger and full public verification.
- * Version:           2.4.1
+ * Version:           2.4.2
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            The-RNG
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'TRNG_VERSION', '2.4.1' );
+define( 'TRNG_VERSION', '2.4.2' );
 define( 'TRNG_PLUGIN_FILE', __FILE__ );
 define( 'TRNG_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'TRNG_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.4.1
+Stable tag: 2.4.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,10 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.4.2 =
+* Integrity endpoint now sends no-cache headers so the file-hash manifest can never be served stale by page caches or CDNs.
+
 
 = 2.4.1 =
 * Login wall now offers Create Account / Log In buttons automatically when registration is open, falling back to enquiry-only wording when it is closed.
