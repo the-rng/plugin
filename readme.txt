@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.5.0
+Stable tag: 2.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,10 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.6.0 =
+* REST API for operator integrations: POST /the-rng/v1/draws (create+commit), POST /draws/{key}/resolve, GET /draws/{key}. Auth via per-operator X-TRNG-Key (stored hashed, generated on the user profile, revocable). API draws are ledger-attributed to the operator. Rate limited.
+
 
 = 2.5.0 =
 * Redesigned verify page: full draw-details dashboard with status chips, winning-ticket panel, derived-numbers table, copyable verifiably-fair data, pre-hash string, drand proof sidebar, draw information and timeline.
