@@ -180,7 +180,7 @@ class TRNG_Shortcodes {
 						<div><div class="trng-label">Static salt</div><div id="trng-r-salt" class="trng-value trng-mono"></div></div>
 						<div><div class="trng-label">Combined hash (HMAC-SHA256)</div><div id="trng-r-combined" class="trng-value trng-mono trng-wrap"></div></div>
 						<div><div class="trng-label">Beacon signature</div><div id="trng-r-signature" class="trng-value trng-mono trng-wrap"></div></div>
-						<div><div class="trng-label">Completed (UTC)</div><div id="trng-r-completed" class="trng-value"></div></div>
+						<div><div class="trng-label">Completed</div><div id="trng-r-completed" class="trng-value"></div></div>
 					</div>
 					<p id="trng-r-links" class="trng-links"></p>
 				</div>
@@ -191,45 +191,96 @@ class TRNG_Shortcodes {
 	}
 
 	/**
-	 * Public verification page.
+	 * Public verification page — full draw-details layout with automatic
+	 * in-browser verification.
 	 */
 	public static function sc_verify() {
 		$prefill = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		ob_start();
 		?>
-		<div class="trng-wrapper">
-			<div class="trng-card">
+		<div class="trng-wrapper trng-wrapper-wide">
+			<div class="trng-card" id="trng-verify-search">
 				<h2 class="trng-title">Verify a Draw</h2>
-				<p class="trng-subtitle">Enter a verification key to load the full draw record, check it against the public Drand beacon, and recompute the result in your own browser.</p>
-
-				<form id="trng-verify-form" class="trng-form">
-					<div class="trng-row">
-						<label for="trng_verify_key">Verification key</label>
-						<input type="text" id="trng_verify_key" name="key" value="<?php echo esc_attr( $prefill ); ?>" required>
-					</div>
-					<button type="submit" class="trng-button">Verify</button>
+				<p class="trng-subtitle">Enter a verification key to load the full draw record. Verification runs automatically in your own browser.</p>
+				<form id="trng-verify-form" class="trng-form trng-form-inline">
+					<input type="text" id="trng_verify_key" name="key" value="<?php echo esc_attr( $prefill ); ?>" placeholder="e.g. UcwDHvhVhNGD7t" required>
+					<button type="submit" class="trng-button trng-button-inline">Verify</button>
 				</form>
-
 				<div id="trng-verify-status" class="trng-status" aria-live="polite"></div>
+			</div>
 
-				<div id="trng-verify-result" class="trng-result trng-hidden">
-					<h3>Stored Draw Record</h3>
-					<div class="trng-result-grid" id="trng-v-grid"></div>
+			<div id="trng-dd" class="trng-hidden">
+				<div class="trng-dd-head">
+					<h2 class="trng-dd-title">Draw Details <span id="trng-dd-status-chip" class="trng-chip"></span> <span class="trng-chip trng-chip-orange">Drand Quicknet</span></h2>
+					<p class="trng-muted trng-mono trng-small">Round ID: <span id="trng-dd-roundid"></span></p>
+				</div>
 
-					<h3>Winner<span id="trng-v-plural"></span></h3>
-					<div id="trng-v-winners" class="trng-winners"></div>
+				<div class="trng-dd-grid">
+					<div class="trng-dd-main">
+						<div class="trng-card">
+							<h3 class="trng-dd-comp" id="trng-dd-title"></h3>
+							<p class="trng-small" id="trng-dd-urlwrap"><a id="trng-dd-url" target="_blank" rel="noopener noreferrer"></a></p>
+							<p class="trng-dd-tickets"><strong id="trng-dd-sold"></strong> <span class="trng-muted">Sold</span> &nbsp;&middot;&nbsp; <strong id="trng-dd-max"></strong> <span class="trng-muted">Max Tickets</span></p>
+						</div>
 
-					<h3>Step 1 — Check the beacon at the source</h3>
-					<p>The server seed must equal the <code>randomness</code> field published by the Drand network for the committed round. Check it on independent relays (we never host these):</p>
-					<p id="trng-v-beacon-links" class="trng-links"></p>
+						<div class="trng-card trng-dd-winnercard">
+							<div class="trng-dd-winner-head"><span>&#127942; Winning Ticket<span id="trng-dd-plural"></span></span><span class="trng-chip trng-chip-green" id="trng-dd-nwin"></span></div>
+							<div id="trng-dd-winners"></div>
+							<p class="trng-dd-verifiedby trng-hidden trng-small" id="trng-dd-verifiedby">&#10003; Verified by the Drand distributed randomness beacon</p>
+						</div>
 
-					<h3>Step 2 — Recompute the result in your browser</h3>
-					<p>This runs entirely in your browser with the Web Crypto API — our server is not involved.</p>
-					<button type="button" class="trng-button trng-button-secondary" id="trng-v-recompute">Recompute now</button>
-					<div id="trng-v-recompute-out" class="trng-recompute"></div>
+						<div class="trng-card">
+							<h3>Derived Numbers</h3>
+							<p class="trng-muted trng-small">Every 4-byte read of the hash, in order. Rejection sampling guarantees uniform probability.</p>
+							<table class="trng-table" id="trng-dd-steps"><thead><tr><th>Attempt</th><th>Value (uint32 LE)</th><th>Ticket</th><th>Outcome</th></tr></thead><tbody></tbody></table>
+						</div>
 
-					<h3>Step 3 — Verify by hand (optional)</h3>
-					<p>Use the scripts on the <em>Manual Verification</em> page with the values above to reproduce the result on any machine.</p>
+						<div class="trng-card">
+							<h3>Verifiably Fair Data</h3>
+							<div id="trng-dd-fields"></div>
+						</div>
+
+						<div class="trng-card">
+							<h3>All Together</h3>
+							<p class="trng-muted trng-small">Pre-hash string — the combination of all the above data, provided to HMAC-SHA256 with the Server Seed as the key:</p>
+							<textarea id="trng-dd-prehash" class="trng-dd-prehash trng-mono" readonly rows="3"></textarea>
+							<p class="trng-muted trng-small">Combined as: <code>client_seed:round_id:static_salt:tickets_sold:max_tickets</code></p>
+							<div id="trng-dd-hash"></div>
+						</div>
+					</div>
+
+					<div class="trng-dd-side">
+						<div class="trng-card">
+							<h3>Verification</h3>
+							<div id="trng-dd-verdict" class="trng-dd-verdict">Loading&hellip;</div>
+							<button type="button" class="trng-button trng-button-secondary" id="trng-v-recompute">Re-run in-browser verification</button>
+							<details class="trng-dd-log"><summary>Calculation log</summary><div id="trng-v-recompute-out" class="trng-recompute"></div></details>
+							<p class="trng-muted trng-small">Prefer to check by hand? Use the scripts on the Manual Verification page with the data shown here.</p>
+						</div>
+
+						<div class="trng-card">
+							<h3>Drand Proof</h3>
+							<p class="trng-muted trng-small">This draw was generated with the Drand Quicknet beacon, run by the League of Entropy.</p>
+							<div class="trng-dd-inforow"><span>Drand Round</span><strong id="trng-dd-round"></strong></div>
+							<div id="trng-v-beacon-links" class="trng-dd-beaconlinks"></div>
+						</div>
+
+						<div class="trng-card">
+							<h3>Draw Information</h3>
+							<div class="trng-dd-inforow"><span>Verification Key</span><code id="trng-dd-key"></code></div>
+							<div class="trng-dd-inforow"><span>Numbers Derived</span><strong id="trng-dd-derived"></strong></div>
+							<div class="trng-dd-inforow"><span>Pool Size</span><strong id="trng-dd-pool"></strong></div>
+							<div class="trng-dd-inforow"><span>Status</span><span class="trng-chip" id="trng-dd-status2"></span></div>
+							<div class="trng-dd-inforow"><span>Record Hash</span><code id="trng-dd-rechash" class="trng-dd-shorthash"></code></div>
+						</div>
+
+						<div class="trng-card">
+							<h3>Draw Timeline</h3>
+							<div class="trng-dd-inforow"><span>Committed</span><strong id="trng-dd-t-committed"></strong></div>
+							<div class="trng-dd-inforow"><span>Drand Round</span><strong id="trng-dd-t-round"></strong></div>
+							<div class="trng-dd-inforow"><span>Revealed</span><strong id="trng-dd-t-revealed"></strong></div>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
