@@ -36,6 +36,8 @@ class TRNG_Integrity {
 			return;
 		}
 
+		nocache_headers(); // The manifest must never be served stale from a page cache.
+
 		$files    = self::plugin_files();
 		$manifest = array();
 		foreach ( $files as $relative => $absolute ) {
