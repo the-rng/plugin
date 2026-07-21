@@ -387,7 +387,7 @@
 			if (el) { el.innerHTML = html; el.className = 'trng-dd-verdict ' + (cls || ''); }
 		}
 
-		function renderWinnersRows(winners, verified) {
+		function renderWinnersRows(winners, verified, indexes, sold) {
 			var box = $('#trng-dd-winners');
 			if (!box) return;
 			box.innerHTML = '';
@@ -396,6 +396,7 @@
 				row.className = 'trng-dd-winrow';
 				row.innerHTML = '<span class="trng-dd-windex">DRAW #' + (i + 1) + '</span>' +
 					'<span class="trng-dd-winnum">#' + t + '</span>' +
+					((indexes && indexes[i]) ? '<span class="trng-muted trng-small" style="margin-left:8px;">position ' + indexes[i] + ' of ' + Number(sold).toLocaleString() + '</span>' : '') +
 					'<span class="trng-dd-wincheck">' + (verified ? '&#10003;' : '&hellip;') + '</span>';
 				box.appendChild(row);
 			});
@@ -423,7 +424,10 @@
 				var hashOk = res.combined === d.combined_hash;
 				var ok = hashOk && stored === mine;
 
-				// Steps table.
+				// Steps table. For entry-list draws the walk output is a
+				// POSITION in the committed ascending entry list — label it so.
+				var th3 = document.querySelector('#trng-dd-steps thead th:nth-child(3)');
+				if (th3) th3.textContent = list ? 'Position \u2192 Ticket' : 'Ticket';
 				var tbody = document.querySelector('#trng-dd-steps tbody');
 				if (tbody) {
 					tbody.innerHTML = '';
@@ -431,17 +435,17 @@
 						var tr = document.createElement('tr');
 						var outcome = 'Rejected (&ge; limit)';
 						var oc = 'trng-chip';
-						if ('winner' === st.outcome) { outcome = 'Winner #' + st.winnerIndex + (list ? ' &rarr; ticket ' + list[st.ticket - 1] : ''); oc = 'trng-chip trng-chip-green'; }
+						if ('winner' === st.outcome) { outcome = 'Winner #' + st.winnerIndex; oc = 'trng-chip trng-chip-green'; }
 						if ('duplicate' === st.outcome) { outcome = 'Duplicate &mdash; skipped'; }
 						tr.innerHTML = '<td>' + st.attempt + (st.block ? ' <span class="trng-muted trng-small">(ext ' + st.block + ')</span>' : '') + '</td>' +
 							'<td class="trng-mono">' + st.value + '</td>' +
-							'<td>' + (st.ticket ? '<strong>' + st.ticket + '</strong>' : '&mdash;') + '</td>' +
+							'<td>' + (st.ticket ? ('<strong>' + st.ticket + '</strong>' + (list ? ' &rarr; <strong>#' + list[st.ticket - 1] + '</strong>' : '')) : '&mdash;') + '</td>' +
 							'<td><span class="' + oc + '">' + outcome + '</span></td>';
 						tbody.appendChild(tr);
 					});
 				}
 
-				renderWinnersRows(d.winners, ok);
+				renderWinnersRows(d.winners, ok, d.winner_indexes, d.tickets_sold);
 				var vb = $('#trng-dd-verifiedby');
 				if (vb && ok) show(vb);
 
@@ -489,14 +493,30 @@
 					if (d.competition_url) { urlEl.href = d.competition_url; setText(urlEl, d.competition_url); show($('#trng-dd-urlwrap')); }
 					else { hide($('#trng-dd-urlwrap')); }
 				}
+				var entryList = (d.ticket_numbers && d.ticket_numbers.length) ? d.ticket_numbers : null;
 				setText($('#trng-dd-sold'), Number(d.tickets_sold).toLocaleString());
-				setText($('#trng-dd-max'), Number(d.max_tickets).toLocaleString());
+				var maxEl = $('#trng-dd-max');
+				setText(maxEl, entryList ? ('1\u2013' + Number(d.range_max).toLocaleString()) : Number(d.max_tickets).toLocaleString());
+				if (maxEl && maxEl.nextElementSibling) { maxEl.nextElementSibling.textContent = entryList ? 'Number Range' : 'Max Tickets'; }
 
 				// Winners.
 				setText($('#trng-dd-plural'), (d.num_winners > 1) ? 's' : '');
 				chip($('#trng-dd-nwin'), d.num_winners + ' winner' + (d.num_winners > 1 ? 's' : ''), 'trng-chip-green');
-				renderWinnersRows(d.winners || [], false);
+				renderWinnersRows(d.winners || [], false, d.winner_indexes, d.tickets_sold);
 				hide($('#trng-dd-verifiedby'));
+
+				// Entry-list explainer under the winning ticket.
+				var oldNote = document.getElementById('trng-dd-listnote');
+				if (oldNote) oldNote.parentNode.removeChild(oldNote);
+				var wbox = $('#trng-dd-winners');
+				if (wbox && entryList) {
+					var note = document.createElement('p');
+					note.id = 'trng-dd-listnote';
+					note.className = 'trng-muted trng-small';
+					note.style.margin = '8px 0 0';
+					note.innerHTML = 'Entry-list draw: the beacon selects a <strong>position</strong> (1\u2013' + Number(d.tickets_sold).toLocaleString() + ') in the ascending list of sold ticket numbers, committed before the draw round existed. The winning ticket is the number at that position. Sold numbers span 1\u2013' + Number(d.range_max).toLocaleString() + '.';
+					wbox.parentNode.appendChild(note);
+				}
 
 				// Verifiably fair data fields.
 				var clientSeedNote = 'Draw Timestamp · ' + fmtLocal(new Date(Number(d.client_seed)).toISOString().slice(0, 19).replace('T', ' '));
@@ -508,7 +528,8 @@
 						fieldRow('Client Seed', d.client_seed, clientSeedNote) +
 						fieldRow('Round ID', d.round_uuid) +
 						fieldRow('Static Salt', d.static_salt) +
-						'<div class="trng-grid-2">' + fieldRow('Tickets Sold', d.tickets_sold) + fieldRow('Max Tickets', d.max_tickets) + '</div>';
+						'<div class="trng-grid-2">' + fieldRow('Tickets Sold', d.tickets_sold) + fieldRow('Max Tickets', d.max_tickets, entryList ? 'Draw domain: equals the number of committed entries \u2014 the walk output is a position in the entry list' : '') + '</div>' +
+						(entryList ? '<div class="trng-grid-2">' + fieldRow('Number Range', '1\u2013' + d.range_max) + fieldRow('Entry List SHA-256', d.entry_hash || '\u2014', 'Hash of the ascending sold ticket numbers, committed at draw time') + '</div>' : '');
 				}
 
 				// All together.
@@ -523,7 +544,7 @@
 				if (links) links.innerHTML = beaconLinks(d.target_round);
 				setText($('#trng-dd-key'), d.draw_key);
 				setText($('#trng-dd-derived'), (d.winners || []).length || d.num_winners);
-				setText($('#trng-dd-pool'), Number(d.max_tickets).toLocaleString());
+				setText($('#trng-dd-pool'), entryList ? (Number(d.tickets_sold).toLocaleString() + ' entries') : Number(d.max_tickets).toLocaleString());
 				setText($('#trng-dd-rechash'), d.record_hash || '—');
 				setText($('#trng-dd-t-committed'), fmtLocal(d.created_at_utc));
 				setText($('#trng-dd-t-round'), fmtLocal(d.round_time_utc));

@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.7.0
+Stable tag: 2.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,14 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.7.1 =
+* Verify page clarity for entry-list draws: the Derived Numbers column is
+  labelled "Position → Ticket" and shows both values on winning steps; each
+  winning ticket carries a "position N of M" note plus a plain-English
+  explainer; the header shows the real number range instead of "N of N";
+  the record fields add Number Range and Entry List SHA-256; Pool Size
+  reads as entries. Classic draws are displayed exactly as before.
 
 = 2.7.0 =
 * Entry-list draws: operators can commit the exact list of sold ticket
