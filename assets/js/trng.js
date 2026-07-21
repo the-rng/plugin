@@ -413,8 +413,13 @@
 			verdict('Verifying in your browser&hellip;', '');
 
 			runDraw(d).then(function (res) {
+				// Entry-list draws (v2.7+): the engine walk yields a 1-based
+				// index into the published ticket_numbers list — map it before
+				// comparing against the stored literal winning tickets.
+				var list = (d.ticket_numbers && d.ticket_numbers.length) ? d.ticket_numbers : null;
+				var recomputed = list ? res.winners.map(function (ix) { return list[ix - 1]; }) : res.winners;
 				var stored = (d.winners || []).join(',');
-				var mine = res.winners.join(',');
+				var mine = recomputed.join(',');
 				var hashOk = res.combined === d.combined_hash;
 				var ok = hashOk && stored === mine;
 
@@ -426,7 +431,7 @@
 						var tr = document.createElement('tr');
 						var outcome = 'Rejected (&ge; limit)';
 						var oc = 'trng-chip';
-						if ('winner' === st.outcome) { outcome = 'Winner #' + st.winnerIndex; oc = 'trng-chip trng-chip-green'; }
+						if ('winner' === st.outcome) { outcome = 'Winner #' + st.winnerIndex + (list ? ' &rarr; ticket ' + list[st.ticket - 1] : ''); oc = 'trng-chip trng-chip-green'; }
 						if ('duplicate' === st.outcome) { outcome = 'Duplicate &mdash; skipped'; }
 						tr.innerHTML = '<td>' + st.attempt + (st.block ? ' <span class="trng-muted trng-small">(ext ' + st.block + ')</span>' : '') + '</td>' +
 							'<td class="trng-mono">' + st.value + '</td>' +
@@ -449,7 +454,7 @@
 
 				var log = $('#trng-v-recompute-out');
 				if (log) {
-					log.textContent = 'data = "' + res.data + '"\nkey  = ' + d.server_seed + '\nHMAC-SHA256 = ' + res.combined + '\nlimit = ' + res.limit + '\nrecomputed winners: ' + mine + '\nstored winners:     ' + stored;
+					log.textContent = 'data = "' + res.data + '"\nkey  = ' + d.server_seed + '\nHMAC-SHA256 = ' + res.combined + '\nlimit = ' + res.limit + (list ? '\nraw walk indexes:   ' + res.winners.join(',') + '\nentry-list mapping: winning ticket = ticket_numbers[index - 1]' : '') + '\nrecomputed winners: ' + mine + '\nstored winners:     ' + stored;
 				}
 			});
 		}

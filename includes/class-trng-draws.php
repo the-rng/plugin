@@ -45,6 +45,27 @@ class TRNG_Draws {
 	}
 
 	/**
+	 * Map drawn indexes (1-based) onto an entry list of ticket numbers.
+	 * Pure and dependency-free so verifiers can replicate it trivially.
+	 *
+	 * @param int[] $indexes 1-based indexes from the engine walk.
+	 * @param int[] $list    Ascending unique ticket numbers.
+	 * @return int[]|WP_Error Literal winning tickets in draw order.
+	 */
+	public static function map_indexes_to_tickets( $indexes, $list ) {
+		$tickets = array();
+		$count   = count( $list );
+		foreach ( (array) $indexes as $ix ) {
+			$ix = (int) $ix;
+			if ( $ix < 1 || $ix > $count ) {
+				return new WP_Error( 'trng_index_range', 'Drawn index ' . $ix . ' is outside the entry list (1..' . $count . ').' );
+			}
+			$tickets[] = (int) $list[ $ix - 1 ];
+		}
+		return $tickets;
+	}
+
+	/**
 	 * Create a pending draw: commits to a future drand round BEFORE its
 	 * randomness exists, together with the forced timestamp client seed.
 	 *
@@ -60,6 +81,34 @@ class TRNG_Draws {
 		$max     = (int) $args['max_tickets'];
 		$winners = max( 1, (int) $args['num_winners'] );
 		$limit   = (int) TRNG_Settings::get( 'max_tickets_limit' );
+
+		// Optional entry list (v2.7+): the ACTUAL sold ticket numbers. When
+		// given, the draw domain becomes 1..count(list) — a uniform index over
+		// real entries — and the LITERAL winning ticket is what gets published
+		// everywhere. $range_max records the competition's real number range
+		// for display; the entry list itself is committed into the record (and
+		// its hash chain) before the drand round exists.
+		$list      = array();
+		$range_max = 0;
+		if ( ! empty( $args['ticket_numbers'] ) && is_array( $args['ticket_numbers'] ) ) {
+			foreach ( $args['ticket_numbers'] as $n ) {
+				$n = (int) $n;
+				if ( $n > 0 ) {
+					$list[ $n ] = $n; // De-duplicates as it goes.
+				}
+			}
+			$list = array_values( $list );
+			sort( $list, SORT_NUMERIC );
+			if ( empty( $list ) ) {
+				return new WP_Error( 'trng_invalid', 'ticket_numbers contained no valid ticket numbers.' );
+			}
+			if ( count( $list ) > $limit ) {
+				return new WP_Error( 'trng_invalid', sprintf( 'Entry list exceeds the %d ticket limit.', $limit ) );
+			}
+			$range_max = max( isset( $args['range_max'] ) ? (int) $args['range_max'] : 0, (int) end( $list ) );
+			$sold      = count( $list ); // Engine domain: 1..count(list).
+			$max       = count( $list );
+		}
 
 		if ( '' === $title ) {
 			return new WP_Error( 'trng_invalid', 'Competition title is required.' );
@@ -100,11 +149,16 @@ class TRNG_Draws {
 			'created_at'        => gmdate( 'Y-m-d H:i:s' ),
 		);
 
-		$inserted = $wpdb->insert(
-			self::table(),
-			$row,
-			array( '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
-		);
+		$formats = array( '%s', '%d', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' );
+
+		if ( $list ) {
+			$row['ticket_numbers'] = wp_json_encode( $list );
+			$row['range_max']      = $range_max;
+			$formats[]             = '%s';
+			$formats[]             = '%d';
+		}
+
+		$inserted = $wpdb->insert( self::table(), $row, $formats );
 
 		if ( ! $inserted ) {
 			return new WP_Error( 'trng_db', 'Could not store the draw commitment.' );
@@ -164,22 +218,44 @@ class TRNG_Draws {
 			return new WP_Error( 'trng_engine', $e->getMessage() );
 		}
 
+		// Entry-list draws: the engine produced 1-based indexes into the
+		// committed list — the record and every display carry the LITERAL
+		// winning tickets, with the raw indexes preserved for verification.
+		$indexes = null;
+		$final   = $result['winners'];
+		$list    = ! empty( $draw['ticket_numbers'] ) ? json_decode( (string) $draw['ticket_numbers'], true ) : null;
+		if ( is_array( $list ) && $list ) {
+			$indexes = $result['winners'];
+			$mapped  = self::map_indexes_to_tickets( $indexes, $list );
+			if ( is_wp_error( $mapped ) ) {
+				return $mapped; // Engine guarantees the range; defensive only.
+			}
+			$final = $mapped;
+		}
+
+		$result_public = array(
+			'combined_hash' => $result['combined_hash'],
+			'winners'       => $final,
+			'indexes'       => $indexes,
+		);
+
 		$completed_at = gmdate( 'Y-m-d H:i:s' );
 		$prev_hash    = self::ledger_head();
-		$record_hash  = self::compute_record_hash( $draw, $beacon, $result, $completed_at, $prev_hash );
+		$record_hash  = self::compute_record_hash( $draw, $beacon, $result_public, $completed_at, $prev_hash );
 
 		// Guard against a concurrent completion of the same draw.
 		$updated = $wpdb->query(
 			$wpdb->prepare(
 				'UPDATE ' . self::table() . '
 				 SET status = %s, server_seed = %s, drand_signature = %s, combined_hash = %s,
-				     results = %s, endpoints_used = %s, prev_hash = %s, record_hash = %s, completed_at = %s
+				     results = %s, result_indexes = %s, endpoints_used = %s, prev_hash = %s, record_hash = %s, completed_at = %s
 				 WHERE draw_key = %s AND status = %s',
 				'complete',
 				$beacon['randomness'],
 				$beacon['signature'],
-				$result['combined_hash'],
-				wp_json_encode( $result['winners'] ),
+				$result_public['combined_hash'],
+				wp_json_encode( $result_public['winners'] ),
+				$indexes ? wp_json_encode( array_map( 'intval', $indexes ) ) : '',
 				$beacon['endpoints_used'],
 				$prev_hash,
 				$record_hash,
@@ -226,6 +302,16 @@ class TRNG_Draws {
 				(string) $prev_hash,
 			)
 		);
+
+		// Entry-list draws (v2.7+) additionally bind the exact entry list,
+		// the display range and the raw drawn indexes. Conditional, so every
+		// pre-2.7 record hash stays byte-identical and the chain verifies.
+		if ( ! empty( $draw['ticket_numbers'] ) ) {
+			$canonical .= '|' . (string) $draw['ticket_numbers']
+				. '|' . (int) ( isset( $draw['range_max'] ) ? $draw['range_max'] : 0 )
+				. '|' . wp_json_encode( array_map( 'intval', (array) ( isset( $result['indexes'] ) ? $result['indexes'] : array() ) ) );
+		}
+
 		return hash( 'sha256', $canonical );
 	}
 
@@ -265,6 +351,7 @@ class TRNG_Draws {
 			$result = array(
 				'combined_hash' => $row['combined_hash'],
 				'winners'       => json_decode( (string) $row['results'], true ),
+				'indexes'       => ( isset( $row['result_indexes'] ) && $row['result_indexes'] ) ? json_decode( (string) $row['result_indexes'], true ) : array(),
 			);
 
 			$expected = self::compute_record_hash( $row, $beacon, $result, $row['completed_at'], $row['prev_hash'] );
@@ -325,11 +412,16 @@ class TRNG_Draws {
 			'drand_signature'   => $draw['drand_signature'],
 			'combined_hash'     => $draw['combined_hash'],
 			'winners'           => $draw['results'] ? json_decode( (string) $draw['results'], true ) : null,
+			'winner_indexes'    => ( isset( $draw['result_indexes'] ) && $draw['result_indexes'] ) ? json_decode( (string) $draw['result_indexes'], true ) : null,
+			'ticket_numbers'    => ( isset( $draw['ticket_numbers'] ) && $draw['ticket_numbers'] ) ? json_decode( (string) $draw['ticket_numbers'], true ) : null,
+			'range_max'         => ( isset( $draw['range_max'] ) && $draw['range_max'] ) ? (int) $draw['range_max'] : null,
+			'entry_hash'        => ( isset( $draw['ticket_numbers'] ) && $draw['ticket_numbers'] ) ? hash( 'sha256', implode( ',', array_map( 'intval', (array) json_decode( (string) $draw['ticket_numbers'], true ) ) ) ) : null,
 			'prev_hash'         => $draw['prev_hash'],
 			'record_hash'       => $draw['record_hash'],
 			'created_at_utc'    => $draw['created_at'],
 			'completed_at_utc'  => $draw['completed_at'],
-			'algorithm'         => 'HMAC-SHA256(clientSeed:roundId:staticSalt:ticketsSold:maxTickets, key=serverSeed) + rejection sampling (uint32 LE, limit = 0xFFFFFFFF - (0xFFFFFFFF % maxTickets)), winner = (value % maxTickets) + 1',
+			'algorithm'         => 'HMAC-SHA256(clientSeed:roundId:staticSalt:ticketsSold:maxTickets, key=serverSeed) + rejection sampling (uint32 LE, limit = 0xFFFFFFFF - (0xFFFFFFFF % maxTickets)), winner = (value % maxTickets) + 1'
+				. ( ( isset( $draw['ticket_numbers'] ) && $draw['ticket_numbers'] ) ? ' | entry-list draw: maxTickets = count(ticket_numbers); winning ticket = ticket_numbers[winner - 1] (raw walk output in winner_indexes)' : '' ),
 		);
 	}
 

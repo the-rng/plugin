@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.6.0
+Stable tag: 2.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,22 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.7.0 =
+* Entry-list draws: operators can commit the exact list of sold ticket
+  numbers (API: ticket_numbers + range_max). The engine draws a uniform
+  index over the list and the record publishes the LITERAL winning ticket,
+  the real number range, the raw drawn indexes, the entry list and its
+  SHA-256 — fully reproducible end to end.
+* Record hash chain: entry-list records additionally bind the list, range
+  and raw indexes. Conditional — every pre-2.7 record hash is byte-identical
+  and the existing chain verifies unchanged.
+* GitHub ledger records for entry-list draws include ticket_range_max,
+  entry_hash, result_indexes and (up to 50,000 entries) ticket_numbers.
+* In-browser verification maps the recomputed walk through the published
+  entry list and shows "Winner #n → ticket T" in the steps table.
+* Backwards compatible: draws without an entry list behave exactly as 2.6.
+
 
 = 2.6.0 =
 * REST API for operator integrations: POST /the-rng/v1/draws (create+commit), POST /draws/{key}/resolve, GET /draws/{key}. Auth via per-operator X-TRNG-Key (stored hashed, generated on the user profile, revocable). API draws are ledger-attributed to the operator. Rate limited.

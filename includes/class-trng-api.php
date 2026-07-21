@@ -46,6 +46,13 @@ class TRNG_API {
 					'tickets_sold' => array( 'type' => 'integer', 'required' => true ),
 					'max_tickets'  => array( 'type' => 'integer', 'required' => true ),
 					'num_winners'  => array( 'type' => 'integer', 'required' => false, 'default' => 1 ),
+					'ticket_numbers' => array(
+						'type'     => 'array',
+						'required' => false,
+						'default'  => array(),
+						'items'    => array( 'type' => 'integer' ),
+					),
+					'range_max'    => array( 'type' => 'integer', 'required' => false, 'default' => 0 ),
 				),
 			)
 		);
@@ -135,6 +142,8 @@ class TRNG_API {
 				'tickets_sold' => (int) $request['tickets_sold'],
 				'max_tickets'  => (int) $request['max_tickets'],
 				'num_winners'  => (int) $request['num_winners'],
+				'ticket_numbers' => (array) $request['ticket_numbers'],
+				'range_max'    => (int) $request['range_max'],
 				'user_id'      => (int) $request['_trng_user_id'],
 			)
 		);

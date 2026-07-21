@@ -189,7 +189,7 @@ class TRNG_GitHub {
 	public static function build_payload( $draw ) {
 		$winners = $draw['results'] ? (array) json_decode( (string) $draw['results'], true ) : array();
 
-		return array(
+		$payload = array(
 			'round_id'          => (string) $draw['round_uuid'],
 			'draw_title'        => (string) $draw['competition_title'],
 			'competition_url'   => (string) $draw['competition_url'],
@@ -207,6 +207,24 @@ class TRNG_GitHub {
 			'created_at'        => self::iso( $draw['created_at'] ),
 			'revealed_at'       => self::iso( $draw['completed_at'] ),
 		);
+
+		// Entry-list draws (v2.7+): the ledger additionally publishes the
+		// real number range, the committed entry-list hash, the raw drawn
+		// indexes, and (size permitting) the full entry list itself — so the
+		// literal winning ticket in `result` is reproducible end to end.
+		if ( ! empty( $draw['ticket_numbers'] ) ) {
+			$list = array_map( 'intval', (array) json_decode( (string) $draw['ticket_numbers'], true ) );
+
+			$payload['ticket_range_max'] = (int) $draw['range_max'];
+			$payload['entry_hash']       = hash( 'sha256', implode( ',', $list ) );
+			$payload['result_indexes']   = implode( ', ', array_map( 'strval', (array) json_decode( (string) ( isset( $draw['result_indexes'] ) ? $draw['result_indexes'] : '' ), true ) ) );
+
+			if ( count( $list ) <= (int) apply_filters( 'trng_ledger_entry_list_limit', 50000 ) ) {
+				$payload['ticket_numbers'] = $list;
+			}
+		}
+
+		return $payload;
 	}
 
 	/**

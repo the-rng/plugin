@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class TRNG_Install {
 
-	const DB_VERSION = '2.4.0';
+	const DB_VERSION = '2.7.0';
 
 	/**
 	 * Activation: create the draws ledger table, salt and endpoints.
@@ -88,6 +88,9 @@ class TRNG_Install {
 			drand_signature VARCHAR(256) NULL,
 			combined_hash CHAR(64) NULL,
 			results TEXT NULL,
+			result_indexes TEXT NULL,
+			ticket_numbers LONGTEXT NULL,
+			range_max INT UNSIGNED NULL,
 			endpoints_used VARCHAR(500) NULL,
 			ledger_pushed TINYINT(1) NOT NULL DEFAULT 0,
 			ledger_path VARCHAR(255) NULL,
