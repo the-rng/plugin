@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.7.1
+Stable tag: 2.7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,12 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.7.2 =
+* Ledger JSON files now encode with JSON_UNESCAPED_UNICODE, so currency
+  symbols and other non-ASCII characters in draw titles appear literally
+  (£ instead of \u00a3). Byte-format only; identical decoded content, no
+  effect on record hashes or the chain.
 
 = 2.7.1 =
 * Verify page clarity for entry-list draws: the Derived Numbers column is

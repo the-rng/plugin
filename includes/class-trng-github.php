@@ -263,7 +263,7 @@ class TRNG_GitHub {
 
 		$path    = self::path_for( $draw );
 		$payload = self::build_payload( $draw );
-		$json    = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		$json    = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 		$url     = self::API . '/repos/' . self::repo() . '/contents/' . $path;
 
 		$body = array(
