@@ -3,7 +3,7 @@
  * Plugin Name:       The-RNG — Verifiably Fair Random Number Generator
  * Plugin URI:        https://the-rng.com
  * Description:       Verifiably fair random number generation for competitions and raffles, powered by the drand distributed randomness beacon (League of Entropy, served via the Cloudflare relay). HMAC-SHA256 seed combination, rejection sampling (no modulo bias), tamper-evident draw ledger and full public verification.
- * Version:           2.7.2
+ * Version:           2.8.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            The-RNG
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'TRNG_VERSION', '2.7.2' );
+define( 'TRNG_VERSION', '2.8.0' );
 define( 'TRNG_PLUGIN_FILE', __FILE__ );
 define( 'TRNG_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'TRNG_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -46,6 +46,7 @@ require_once TRNG_PLUGIN_DIR . 'includes/class-trng-integrity.php';
 require_once TRNG_PLUGIN_DIR . 'includes/class-trng-github.php';
 require_once TRNG_PLUGIN_DIR . 'includes/class-trng-registration.php';
 require_once TRNG_PLUGIN_DIR . 'includes/class-trng-api.php';
+require_once TRNG_PLUGIN_DIR . 'includes/class-trng-audit.php';
 require_once TRNG_PLUGIN_DIR . 'includes/class-trng-woocommerce.php';
 
 register_activation_hook( __FILE__, array( 'TRNG_Install', 'activate' ) );
@@ -62,6 +63,7 @@ function trng_init() {
 	TRNG_GitHub::register();
 	TRNG_Registration::register();
 	TRNG_API::register();
+	TRNG_Audit::register();
 	TRNG_WooCommerce::register();
 }
 add_action( 'plugins_loaded', 'trng_init' );

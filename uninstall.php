@@ -15,6 +15,7 @@ $trng_settings = get_option( 'trng_settings', array() );
 if ( is_array( $trng_settings ) && ! empty( $trng_settings['delete_on_uninstall'] ) ) {
 	global $wpdb;
 	$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'trng_draws' ); // phpcs:ignore
+	$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'trng_audit' ); // phpcs:ignore
 	delete_option( 'trng_settings' );
 	delete_option( 'trng_db_version' );
 }

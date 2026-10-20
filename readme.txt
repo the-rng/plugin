@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.7.2
+Stable tag: 2.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,34 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.8.0 =
+* Instant win audit records. Operators running instant wins (BC
+  Competitions 0.3.0 and later, through The-RNG Link 2.4.0) send a seal
+  when a draw makes its first sale and a reveal when it closes. The seal
+  fixes the ticket count, the instant prize list digest and a SHA-256
+  commitment to the draw's shuffle key; the reveal gives the key and
+  fingerprints of every allocation and win.
+* API: POST /the-rng/v1/audit (X-TRNG-Key) and public GET
+  /the-rng/v1/audit/{key}. On receipt the text's format and SHA-256 are
+  checked, and a reveal must name a seal the same operator recorded and
+  carry a key that hashes to that seal's commitment, or it is refused.
+* Records are append-only and chained with SHA-256 (separately from the
+  draw chain), and published to the GitHub ledger under
+  audit/YYYY/MM/DD/{key}.json. The hourly sweep retries any that missed.
+* [trng_verify] shows an audit record for its ?key=, with in-browser
+  checks of the text's hash and of the key against the seal.
+* Draw records, their hashes and the draw chain are unchanged.
+* Generator: the limit of 12 draws a minute is removed, and approved
+  operators are no longer throttled while their draws resolve. A draw with
+  few tickets sold can take 20 or more draws to land on a sold ticket.
+* Generator session check: the page checks you are still logged in when it
+  loads, every minute, when you come back to the tab and before every draw.
+  If you have been logged out it locks the Generate button and shows a "Log
+  in again" link (straight back to the page) before you type anything, and
+  keeps what you typed. Previously a logged-out draw failed with "Network
+  error". The security token is refreshed on every check so it never expires
+  on an open page, and the generator page is never cached.
 
 = 2.7.2 =
 * Ledger JSON files now encode with JSON_UNESCAPED_UNICODE, so currency
