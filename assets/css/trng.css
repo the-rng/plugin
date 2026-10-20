@@ -293,3 +293,8 @@
 	font-size: .88em; font-weight: 600; color: var(--trng-fg); background: var(--trng-bg);
 }
 .trng-dd-beaconlinks a:hover { border-color: var(--trng-accent); color: var(--trng-accent); }
+
+/* v2.8.0: logged-out notice on the generator */
+.trng-session-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--trng-bad); border-radius: 10px; background: var(--trng-bad-bg); }
+.trng-session-banner.trng-hidden { display: none; }
+.trng-session-banner .trng-button { margin: 0; }

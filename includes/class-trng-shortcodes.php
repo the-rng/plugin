@@ -20,6 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class TRNG_Shortcodes {
 
 	public static function register() {
+		add_action( 'template_redirect', array( __CLASS__, 'no_cache_generator' ) );
 		add_shortcode( 'trng_generator', array( __CLASS__, 'sc_generator' ) );
 		add_shortcode( 'trng_verify', array( __CLASS__, 'sc_verify' ) );
 		add_shortcode( 'trng_past_draws', array( __CLASS__, 'sc_past_draws' ) );
@@ -93,6 +94,22 @@ class TRNG_Shortcodes {
 		</div></div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * v2.8.0: the generator page is never cached (browser, page cache or CDN), so a logged-out
+	 * visitor can never be shown a copy of the form from when they were logged in.
+	 */
+	public static function no_cache_generator() {
+		$post = get_queried_object();
+		if ( ! is_singular() || ! $post instanceof WP_Post || ! has_shortcode( (string) $post->post_content, 'trng_generator' ) ) {
+			return;
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
 	}
 
 	/**
@@ -196,6 +213,13 @@ class TRNG_Shortcodes {
 	 */
 	public static function sc_verify() {
 		$prefill = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// v2.8.0: a key belonging to an instant win audit record (seal or reveal) shows that record.
+		if ( '' !== $prefill && class_exists( 'TRNG_Audit' ) ) {
+			$audit = TRNG_Audit::get( $prefill );
+			if ( $audit ) {
+				return TRNG_Audit::render( $audit );
+			}
+		}
 		ob_start();
 		?>
 		<div class="trng-wrapper trng-wrapper-wide">

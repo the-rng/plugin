@@ -21,6 +21,7 @@ This repository contains the complete source of the plugin running at [the-rng.c
 * Public **integrity endpoint** (`/?trng_integrity=1`) publishing SHA-256 hashes of every running plugin file for comparison against this repository
 * Operator details (name, website, company number) collected at registration, shown in every ledger record; **manual account approval** before draws can be generated
 * Public verification page with in-browser recomputation, manual-verification guide with PHP/JS scripts, live drand chain info
+* **Instant win audit records** (2.8.0): operators' seals (made at a draw's first sale: ticket count, prize list digest, commitment to the draw's shuffle key) and reveals (at close: the key, allocation and win digests), checked on receipt, hash-chained separately from draws and mirrored to the GitHub ledger under `audit/YYYY/MM/DD/`. A reveal whose key does not match its seal is refused. API: `POST /wp-json/the-rng/v1/audit` (operator key), public `GET /wp-json/the-rng/v1/audit/{key}`; `[trng_verify]` shows them by key
 
 ## Shortcodes
 

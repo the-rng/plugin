@@ -238,6 +238,38 @@ class TRNG_GitHub {
 		return gmdate( 'Y/m/d', $ts ) . '/' . $draw['round_uuid'] . '.json';
 	}
 
+	/** Public form of the operator block (used for audit records, v2.8.0). */
+	public static function operator_block( $row ) {
+		return self::operator_for( $row );
+	}
+
+	/**
+	 * Commit any JSON payload to a path in the ledger repository (v2.8.0,
+	 * used for audit records). Updates the file in place if it exists.
+	 *
+	 * @param string $path    Repository path.
+	 * @param array  $payload Data.
+	 * @param string $message Commit message.
+	 * @return true|WP_Error
+	 */
+	public static function put_json( $path, $payload, $message ) {
+		if ( ! self::enabled() ) {
+			return new WP_Error( 'trng_gh_disabled', 'GitHub ledger is not configured.' );
+		}
+		$url  = self::API . '/repos/' . self::repo() . '/contents/' . $path;
+		$body = array(
+			'message' => $message,
+			'content' => base64_encode( wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ), // phpcs:ignore
+			'branch'  => self::branch(),
+		);
+		$existing = self::request( 'GET', $url . '?ref=' . rawurlencode( self::branch() ) );
+		if ( ! is_wp_error( $existing ) && isset( $existing['sha'] ) ) {
+			$body['sha'] = $existing['sha'];
+		}
+		$response = self::request( 'PUT', $url, $body );
+		return is_wp_error( $response ) ? $response : true;
+	}
+
 	/* ------------------------------------------------------------------
 	   PUSH
 	------------------------------------------------------------------ */

@@ -19,8 +19,15 @@
 		var fd = new FormData();
 		fd.append('action', action);
 		Object.keys(fields || {}).forEach(function (k) { fd.append(k, fields[k]); });
-		return fetch(cfg.ajax_url, { method: 'POST', body: fd, credentials: 'same-origin' })
-			.then(function (res) { return res.json(); });
+		return fetch(cfg.ajax_url, { method: 'POST', body: fd, credentials: 'same-origin', cache: 'no-store' })
+			.then(function (res) { return res.text(); })
+			.then(function (text) {
+				try { return JSON.parse(text); } catch (e) {
+					// WordPress answers "0" or "-1" when the session has gone.
+					var out = String(text).trim() === '0' || String(text).trim() === '-1';
+					return { success: false, data: { code: out ? 'logged_out' : 'bad_response', message: out ? 'You have been logged out. Log in again to generate this draw.' : 'The server sent an unexpected reply. Please try again.' } };
+				}
+			});
 	}
 
 	function bytesToHex(bytes) {
@@ -198,11 +205,76 @@
 		var resultEl = $('#trng-result');
 		var btn = $('#trng-generate-btn');
 		var rolling = null;
+		var busy = false;
+
+		/* v2.8.0 session guard: checked on load, every minute, when the tab comes back and before every
+		   draw. A logged-out page is locked with a log-in link before anything is typed, the entries
+		   are kept in this tab, and the security token is refreshed each time so it never expires. */
+		var page = window.location.href.split('#')[0];
+		var DRAFT = 'trng_generator_draft';
+		var names = ['title', 'url', 'tickets_sold', 'max_tickets', 'num_winners'];
+		var banner = document.createElement('div');
+		banner.className = 'trng-status trng-status-error trng-session-banner trng-hidden';
+		banner.setAttribute('role', 'alert');
+		form.parentNode.insertBefore(banner, form);
+		function field(n) { return form.querySelector('[name="' + n + '"]'); }
+		function saveDraft() {
+			try { var d = {}; names.forEach(function (n) { d[n] = field(n).value; }); sessionStorage.setItem(DRAFT, JSON.stringify(d)); } catch (e) {}
+		}
+		function restoreDraft() {
+			try {
+				var d = JSON.parse(sessionStorage.getItem(DRAFT) || 'null');
+				if (d) names.forEach(function (n) { var el = field(n); if (el && !el.value && d[n] != null && d[n] !== '') el.value = d[n]; });
+			} catch (e) {}
+		}
+		function lockOut(text, loginUrl) {
+			saveDraft();
+			btn.disabled = true;
+			banner.textContent = '';
+			banner.appendChild(document.createTextNode(text + ' '));
+			if (loginUrl) {
+				var a = document.createElement('a');
+				a.href = loginUrl; a.className = 'trng-button trng-button-inline'; a.textContent = 'Log in again';
+				banner.appendChild(a);
+			}
+			show(banner);
+		}
+		function unlock(nonce) {
+			hide(banner);
+			if (nonce) field('trng_nonce').value = nonce;
+			if (!busy) btn.disabled = false;
+		}
+		/* Resolves true (logged in and approved), false (locked out) or null (could not tell: carry on). */
+		function checkSession() {
+			return post('trng_session', { page: page }).then(function (d) {
+				var s = (d && d.data) || {};
+				if (!d || !d.success) return null;
+				if (!s.logged_in) { lockOut('You have been logged out. Your entries are kept on this page.', s.login_url); return false; }
+				if (!s.approved) { lockOut('This account is not approved to run draws yet.', ''); return false; }
+				unlock(s.nonce);
+				return true;
+			}).catch(function () { return null; });
+		}
+		restoreDraft();
+		checkSession();
+		setInterval(checkSession, 60000);
+		document.addEventListener('visibilitychange', function () { if (!document.hidden) checkSession(); });
+		window.addEventListener('focus', checkSession);
+		form.addEventListener('input', saveDraft);
 		var countdownTimer = null;
 
 		form.addEventListener('submit', function (e) {
 			e.preventDefault();
+			if (busy) return;
+			busy = true;
+			btn.disabled = true;
+			saveDraft();
+			checkSession().then(function (ok) {
+				if (false === ok) { busy = false; return; }
+				begin(false);
+			});
 
+			function begin(retried) {
 			hide(resultEl); hide(commitEl);
 			statusEl.classList.remove('trng-status-error');
 			setText(statusEl, 'Committing draw to a future drand round…');
@@ -221,7 +293,17 @@
 
 			post('trng_start', fields).then(function (data) {
 				if (!data || !data.success) {
-					fail((data && data.data && data.data.message) || 'Could not start the draw.');
+					var err = (data && data.data) || {};
+					if ('logged_out' === err.code) {
+						busy = false; setText(statusEl, '');
+						lockOut('You have been logged out, so this draw was not started. Your entries are kept on this page.', err.login_url || '');
+						return;
+					}
+					if ('nonce' === err.code && !retried) {
+						checkSession().then(function (ok) { if (ok) { begin(true); } else { busy = false; setText(statusEl, ''); } });
+						return;
+					}
+					fail(err.message || 'Could not start the draw.');
 					return;
 				}
 
@@ -249,6 +331,7 @@
 					}
 				}, 100);
 			}).catch(function () { fail('Network error. Please try again.'); });
+			}
 
 			function attemptComplete(drawKey, tries) {
 				if (tries > 20) { fail('The drand relay is not responding. The draw is committed and can be resolved from the Verify page at any time using key ' + drawKey + '.'); return; }
@@ -291,6 +374,7 @@
 
 				show(resultEl);
 				setText(statusEl, 'Draw complete. All inputs are now public — verify the result on any device.');
+				busy = false;
 				btn.disabled = false;
 			}
 
@@ -300,6 +384,7 @@
 				setText(animEl, '—');
 				setText(statusEl, message);
 				statusEl.classList.add('trng-status-error');
+				busy = false;
 				btn.disabled = false;
 			}
 		});

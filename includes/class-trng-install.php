@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class TRNG_Install {
 
-	const DB_VERSION = '2.7.0';
+	const DB_VERSION = '2.8.0';
 
 	/**
 	 * Activation: create the draws ledger table, salt and endpoints.
@@ -108,5 +108,7 @@ class TRNG_Install {
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+		// v2.8.0: instant win audit records (seals and reveals), chained separately from draws.
+		dbDelta( TRNG_Audit::schema( $charset ) );
 	}
 }
