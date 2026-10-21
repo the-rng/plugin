@@ -11,6 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class TRNG_Draws {
 
+	const MAX_DOMAIN = 4294967295;
+
 	/**
 	 * Table name with prefix.
 	 *
@@ -42,6 +44,43 @@ class TRNG_Draws {
 		}
 
 		return bin2hex( random_bytes( 12 ) ); // Practically unreachable.
+	}
+
+	/**
+	 * v2.8.1: expand a compact entry list ("1-250,253,260-900") into ticket
+	 * numbers. Counts before expanding, so a huge range cannot exhaust memory.
+	 *
+	 * @param string $text  Comma-separated numbers and inclusive ranges.
+	 * @param int    $limit Maximum entries allowed.
+	 * @return int[]|WP_Error
+	 */
+	public static function parse_ticket_list( $text, $limit ) {
+		$text = preg_replace( '/\s+/', '', (string) $text );
+		if ( ! preg_match( '/^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$/', $text ) ) {
+			return new WP_Error( 'trng_invalid', 'ticket_list must be comma-separated ticket numbers or ranges, e.g. 1-250,253.' );
+		}
+		$parts = array();
+		$count = 0;
+		foreach ( explode( ',', $text ) as $token ) {
+			$ends = array_map( 'intval', explode( '-', $token ) );
+			$from = $ends[0];
+			$to   = isset( $ends[1] ) ? $ends[1] : $ends[0];
+			if ( $from < 1 || $to < $from ) {
+				return new WP_Error( 'trng_invalid', 'ticket_list has an invalid range: ' . $token . '.' );
+			}
+			$count += $to - $from + 1;
+			if ( $count > $limit ) {
+				return new WP_Error( 'trng_invalid', sprintf( 'Entry list exceeds the %d ticket limit.', $limit ) );
+			}
+			$parts[] = array( $from, $to );
+		}
+		$out = array();
+		foreach ( $parts as $p ) {
+			for ( $n = $p[0]; $n <= $p[1]; $n++ ) {
+				$out[] = $n;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -80,7 +119,9 @@ class TRNG_Draws {
 		$sold    = (int) $args['tickets_sold'];
 		$max     = (int) $args['max_tickets'];
 		$winners = max( 1, (int) $args['num_winners'] );
-		$limit   = (int) TRNG_Settings::get( 'max_tickets_limit' );
+		// v2.8.1: no configured caps. The only ceiling is the engine's number space: draws read unsigned
+		// 32-bit values, so a draw can hold up to 4,294,967,295 tickets.
+		$limit   = self::MAX_DOMAIN;
 
 		// Optional entry list (v2.7+): the ACTUAL sold ticket numbers. When
 		// given, the draw domain becomes 1..count(list) — a uniform index over
@@ -90,6 +131,13 @@ class TRNG_Draws {
 		// its hash chain) before the drand round exists.
 		$list      = array();
 		$range_max = 0;
+		if ( empty( $args['ticket_numbers'] ) && ! empty( $args['ticket_list'] ) ) {
+			$parsed = self::parse_ticket_list( (string) $args['ticket_list'], $limit );
+			if ( is_wp_error( $parsed ) ) {
+				return $parsed;
+			}
+			$args['ticket_numbers'] = $parsed;
+		}
 		if ( ! empty( $args['ticket_numbers'] ) && is_array( $args['ticket_numbers'] ) ) {
 			foreach ( $args['ticket_numbers'] as $n ) {
 				$n = (int) $n;
@@ -119,8 +167,8 @@ class TRNG_Draws {
 		if ( $sold < 0 || $sold > $max ) {
 			return new WP_Error( 'trng_invalid', 'Tickets sold must be between 0 and max tickets.' );
 		}
-		if ( $winners > min( (int) TRNG_Settings::get( 'max_winners' ), $max ) ) {
-			return new WP_Error( 'trng_invalid', 'Too many winners requested.' );
+		if ( $winners > $max ) {
+			return new WP_Error( 'trng_invalid', 'More winners requested than there are tickets.' );
 		}
 
 		// Commit target: live round + offset (default +3 ≈ 9 seconds).

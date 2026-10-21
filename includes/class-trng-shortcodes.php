@@ -123,8 +123,7 @@ class TRNG_Shortcodes {
 			return TRNG_Registration::pending_wall();
 		}
 
-		$max_limit = (int) TRNG_Settings::get( 'max_tickets_limit' );
-		$max_win   = (int) TRNG_Settings::get( 'max_winners' );
+		$max_limit = TRNG_Draws::MAX_DOMAIN;
 
 		ob_start();
 		?>
@@ -166,7 +165,7 @@ class TRNG_Shortcodes {
 					</div>
 					<div class="trng-row">
 						<label for="trng_winners">Number of Winners</label>
-						<input type="number" id="trng_winners" name="num_winners" min="1" max="<?php echo esc_attr( $max_win ); ?>" value="1" required>
+						<input type="number" id="trng_winners" name="num_winners" min="1" value="1" required>
 					</div>
 					<button type="submit" class="trng-button" id="trng-generate-btn">Generate</button>
 				</form>

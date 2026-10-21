@@ -217,8 +217,6 @@ class TRNG_Admin {
 					'round_offset'        => max( 1, min( 100, isset( $_POST['round_offset'] ) ? (int) $_POST['round_offset'] : 3 ) ),
 					'relays'              => $relays ? array_values( $relays ) : TRNG_Settings::defaults()['relays'],
 					'cross_check'         => empty( $_POST['cross_check'] ) ? 0 : 1,
-					'max_tickets_limit'   => max( 1, isset( $_POST['max_tickets_limit'] ) ? (int) $_POST['max_tickets_limit'] : 10000000 ),
-					'max_winners'         => max( 1, min( 1000, isset( $_POST['max_winners'] ) ? (int) $_POST['max_winners'] : 25 ) ),
 					'enquiry_email'       => sanitize_email( isset( $_POST['enquiry_email'] ) ? wp_unslash( $_POST['enquiry_email'] ) : '' ),
 					'display_timezone'    => sanitize_text_field( isset( $_POST['display_timezone'] ) && '' !== trim( (string) wp_unslash( $_POST['display_timezone'] ) ) ? wp_unslash( $_POST['display_timezone'] ) : 'Europe/London' ),
 					'ledger_enabled'      => empty( $_POST['ledger_enabled'] ) ? 0 : 1,
@@ -281,14 +279,6 @@ class TRNG_Admin {
 					<tr>
 						<th>Cross-check beacons</th>
 						<td><label><input type="checkbox" name="cross_check" value="1" <?php checked( $s['cross_check'] ); ?>> Require two independent relays to agree before accepting a beacon</label></td>
-					</tr>
-					<tr>
-						<th><label for="max_tickets_limit">Max tickets limit</label></th>
-						<td><input name="max_tickets_limit" id="max_tickets_limit" type="number" min="1" value="<?php echo (int) $s['max_tickets_limit']; ?>"></td>
-					</tr>
-					<tr>
-						<th><label for="max_winners">Max winners per draw</label></th>
-						<td><input name="max_winners" id="max_winners" type="number" min="1" max="1000" value="<?php echo (int) $s['max_winners']; ?>"></td>
 					</tr>
 					<tr>
 						<th><label for="enquiry_email">Enquiry email</label></th>

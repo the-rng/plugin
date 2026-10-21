@@ -139,11 +139,7 @@ class TRNG_Ajax {
 	 * determined by the public beacon and the stored commitment.
 	 */
 	public static function complete() {
-		// Approved operators polling their own draws are never throttled (see start()); the public stays limited.
-		$operator = is_user_logged_in() && TRNG_Registration::is_approved( get_current_user_id() );
-		if ( ! $operator && ! self::throttle( 'complete', 60 ) ) {
-			wp_send_json_error( array( 'message' => 'Too many requests. Please wait a minute.' ), 429 );
-		}
+		// v2.8.1: never throttled. Resolving is deterministic and finishes a draw once; after that it is a read.
 
 		$key = isset( $_POST['draw_key'] ) ? sanitize_text_field( wp_unslash( $_POST['draw_key'] ) ) : '';
 		if ( '' === $key ) {
@@ -177,9 +173,7 @@ class TRNG_Ajax {
 	 * are completed on the fly (deterministic, so always safe).
 	 */
 	public static function lookup() {
-		if ( ! self::throttle( 'lookup', 60 ) ) {
-			wp_send_json_error( array( 'message' => 'Too many requests. Please wait a minute.' ), 429 );
-		}
+		// v2.8.1: never throttled (The-RNG Link reads results through this from the operator's server).
 
 		$key = isset( $_POST['draw_key'] ) ? sanitize_text_field( wp_unslash( $_POST['draw_key'] ) ) : '';
 		if ( '' === $key ) {

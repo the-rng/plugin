@@ -219,7 +219,8 @@ class TRNG_GitHub {
 			$payload['entry_hash']       = hash( 'sha256', implode( ',', $list ) );
 			$payload['result_indexes']   = implode( ', ', array_map( 'strval', (array) json_decode( (string) ( isset( $draw['result_indexes'] ) ? $draw['result_indexes'] : '' ), true ) ) );
 
-			if ( count( $list ) <= (int) apply_filters( 'trng_ledger_entry_list_limit', 50000 ) ) {
+			// v2.8.1: the full entry list is always published, whatever its size.
+			if ( count( $list ) <= (int) apply_filters( 'trng_ledger_entry_list_limit', PHP_INT_MAX ) ) {
 				$payload['ticket_numbers'] = $list;
 			}
 		}

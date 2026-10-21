@@ -28,8 +28,6 @@ class TRNG_Settings {
 				'https://api3.drand.sh',
 			),
 			'cross_check'         => 1,  // Require 2 independent relays to agree on the beacon.
-			'max_tickets_limit'   => 10000000,
-			'max_winners'         => 25,
 			'enquiry_email'       => 'info@the-rng.com',
 			'display_timezone'    => 'Europe/London', // IANA zone used for on-screen clocks.
 			'github_ledger_url'   => '', // Optional: public GitHub ledger repository URL.

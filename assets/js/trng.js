@@ -334,7 +334,8 @@
 			}
 
 			function attemptComplete(drawKey, tries) {
-				if (tries > 20) { fail('The drand relay is not responding. The draw is committed and can be resolved from the Verify page at any time using key ' + drawKey + '.'); return; }
+				// v2.8.1: keeps checking until the beacon arrives; the draw is already committed.
+				if (tries > 20) { setText(statusEl, 'Still waiting for the drand beacon. The draw is committed (key ' + drawKey + ') and the result will appear here as soon as it arrives.'); }
 
 				post('trng_complete', { draw_key: drawKey }).then(function (data) {
 					if (data && data.success) { reveal(data.data); return; }

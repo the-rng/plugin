@@ -89,13 +89,10 @@ class TRNG_Engine {
 		$block_index = 0;
 		$block_hex   = $combined_hash;
 		$offset      = 0;
-		$guard       = 0;
 
 		while ( count( $winners ) < $num_winners ) {
-			if ( ++$guard > 100000 ) {
-				throw new RuntimeException( 'Draw walk exceeded safety guard.' );
-			}
-
+			// v2.8.1: no attempt cap. Winners are distinct and never more than the tickets, and every
+			// read is uniform, so the walk always completes (extending with new HMAC blocks as needed).
 			$block_bin = hex2bin( $block_hex );
 
 			if ( $offset + 4 > strlen( $block_bin ) ) {

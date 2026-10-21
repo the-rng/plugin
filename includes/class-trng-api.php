@@ -53,6 +53,10 @@ class TRNG_API {
 						'items'    => array( 'type' => 'integer' ),
 					),
 					'range_max'    => array( 'type' => 'integer', 'required' => false, 'default' => 0 ),
+					// v2.8.1: the same entry list as ONE string ("1-250,253,260-900"). A JSON array of 1,000 or
+					// more numbers counts as 1,000+ request arguments, which web application firewalls
+					// (ModSecurity's argument limit) reject with a bare 400 before WordPress runs.
+					'ticket_list'  => array( 'type' => 'string', 'required' => false, 'default' => '' ),
 				),
 			)
 		);
@@ -102,14 +106,7 @@ class TRNG_API {
 			return new WP_Error( 'trng_not_approved', 'This operator account is not approved.', array( 'status' => 403 ) );
 		}
 
-		// Simple per-key rate limit: 30 requests/minute.
-		$bucket = 'trng_api_rate_' . $user_id;
-		$count  = (int) get_transient( $bucket );
-		if ( $count >= 30 ) {
-			return new WP_Error( 'trng_rate', 'Rate limit exceeded.', array( 'status' => 429 ) );
-		}
-		set_transient( $bucket, $count + 1, MINUTE_IN_SECONDS );
-
+		// v2.8.1: no per-key rate limit; approved operators can create and resolve as many draws as they need.
 		$request->set_param( '_trng_user_id', $user_id );
 		return true;
 	}
@@ -144,6 +141,7 @@ class TRNG_API {
 				'num_winners'  => (int) $request['num_winners'],
 				'ticket_numbers' => (array) $request['ticket_numbers'],
 				'range_max'    => (int) $request['range_max'],
+				'ticket_list'  => (string) $request['ticket_list'],
 				'user_id'      => (int) $request['_trng_user_id'],
 			)
 		);

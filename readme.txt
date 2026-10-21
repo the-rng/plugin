@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.8.0
+Stable tag: 2.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,21 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.8.1 =
+* Fix: auto draws with more than 994 tickets sold failed with a bare
+  "400 Bad Request" page. The web server's firewall counts each number in a
+  JSON ticket list as a separate request argument and rejects 1,000 or more
+  before WordPress runs. The API now also accepts the entry list as one
+  compact string, ticket_list ("1-250,253,260-900"), which The-RNG Link
+  2.4.1 sends. ticket_numbers still works; the draw, its record and the
+  ledger are identical either way.
+* No limits: the Max tickets (10,000,000) and Max winners (25) settings are
+  gone, as are the API's 30 draws a minute per operator, the per-visitor
+  limits on resolving and looking up draws, the 50,000 entry cap on lists
+  published to the GitHub ledger, the draw walk's 100,000 read guard and the
+  generator's 20 tries waiting for the beacon. The only ceiling left is the
+  engine's number space: up to 4,294,967,295 tickets per draw.
 
 = 2.8.0 =
 * Instant win audit records. Operators running instant wins (BC
