@@ -54,17 +54,27 @@ class TRNG_Draws {
 	 * @param int    $limit Maximum entries allowed.
 	 * @return int[]|WP_Error
 	 */
+	/** True for a non-empty run of 0-9 (no ctype extension needed). */
+	protected static function digits( $s ) {
+		return '' !== $s && strlen( $s ) <= 10 && strspn( $s, '0123456789' ) === strlen( $s );
+	}
+
 	public static function parse_ticket_list( $text, $limit ) {
-		$text = preg_replace( '/\s+/', '', (string) $text );
-		if ( ! preg_match( '/^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$/', $text ) ) {
-			return new WP_Error( 'trng_invalid', 'ticket_list must be comma-separated ticket numbers or ranges, e.g. 1-250,253.' );
+		// Read token by token: one pattern over the whole list exhausts PCRE's JIT stack on long,
+		// scattered lists (thousands of separate runs), which made valid lists look malformed.
+		$text = str_replace( array( ' ', "\t", "\r", "\n" ), '', (string) $text );
+		if ( '' === $text ) {
+			return new WP_Error( 'trng_invalid', 'ticket_list is empty.' );
 		}
 		$parts = array();
 		$count = 0;
 		foreach ( explode( ',', $text ) as $token ) {
-			$ends = array_map( 'intval', explode( '-', $token ) );
-			$from = $ends[0];
-			$to   = isset( $ends[1] ) ? $ends[1] : $ends[0];
+			$ends = explode( '-', $token );
+			if ( count( $ends ) > 2 || ! self::digits( $ends[0] ) || ( isset( $ends[1] ) && ! self::digits( $ends[1] ) ) ) {
+				return new WP_Error( 'trng_invalid', 'ticket_list must be comma-separated ticket numbers or ranges, e.g. 1-250,253. Bad item: ' . substr( $token, 0, 40 ) );
+			}
+			$from = (int) $ends[0];
+			$to   = isset( $ends[1] ) ? (int) $ends[1] : $from;
 			if ( $from < 1 || $to < $from ) {
 				return new WP_Error( 'trng_invalid', 'ticket_list has an invalid range: ' . $token . '.' );
 			}

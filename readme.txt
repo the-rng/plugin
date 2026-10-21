@@ -4,7 +4,7 @@ Tags: random, rng, raffle, competition, drand, provably fair, verifiable
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.8.1
+Stable tag: 2.8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,14 @@ From the drand distributed randomness beacon (quicknet chain), generated collect
 The draw is locked to a future beacon round before that round's randomness exists, the client seed is a forced timestamp, and every input is published afterwards. Anyone can recompute the result and check the beacon on independent relays.
 
 == Changelog ==
+
+= 2.8.2 =
+* Fix: a ticket_list from a draw whose sold tickets are scattered (thousands
+  of separate runs) was refused as "must be comma-separated ticket numbers or
+  ranges". The format check ran one pattern over the whole list, and PHP's
+  pattern engine runs out of stack on long lists and reports no match. The
+  list is now checked item by item; tested with 100,000 tickets in 100,000
+  separate runs.
 
 = 2.8.1 =
 * Fix: auto draws with more than 994 tickets sold failed with a bare
